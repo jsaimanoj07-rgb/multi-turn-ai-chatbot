@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Byte — Internship Chatbot</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --text: #e8eef7;
+      --muted: #8b9bb4;
+      --accent: #3d8bfd;
+      --user: #243044;
+      --bot: #152033;
+      --error: #ff6b7a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(circle at top, #1c2a40, var(--bg));
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+    }
+    .app {
+      width: min(760px, 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    h1 { font-size: 1.25rem; margin: 0; }
+    p.sub { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; }
+    button.reset {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    #log {
+      flex: 1;
+      overflow-y: auto;
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .msg {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 14px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .user { align-self: flex-end; background: var(--user); }
+    .bot { align-self: flex-start; background: var(--bot); }
+    .error { align-self: stretch; background: #3a1820; color: var(--error); }
+    form {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    input {
+      flex: 1;
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 1rem;
+    }
+    button.send {
+      background: var(--accent);
+      color: white;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 18px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: wait; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Byte, your internship mentor</h1>
+        <p class="sub">Multi-turn chat with last-12-message context window</p>
+      </div>
+      <button class="reset" id="reset">New chat</button>
+    </header>
+    <div id="log"></div>
+    <form id="form">
+      <input id="input" autocomplete="off" placeholder="Ask Byte something…" required />
+      <button class="send" id="send" type="submit">Send</button>
+    </form>
+  </div>
+  <script>
+    const log = document.getElementById("log");
+    const form = document.getElementById("form");
+    const input = document.getElementById("input");
+    const send = document.getElementById("send");
+    const KEY = "byte-conversation-id";
+    let conversationId = localStorage.getItem(KEY);
+
+    function add(text, cls) {
+      const el = document.createElement("div");
+      el.className = "msg " + cls;
+      el.textContent = text;
+      log.appendChild(el);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    add("Hey, I'm Byte. Tell me what you're working on — I'll remember this chat as we go.", "bot");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const message = input.value.trim();
+      if (!message) return;
+      add(message, "user");
+      input.value = "";
+      send.disabled = true;
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message, conversation_id: conversationId }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          add(data.detail || "Something went wrong.", "error");
+        } else {
+          conversationId = data.conversation_id;
+          localStorage.setItem(KEY, conversationId);
+          add(data.reply, "bot");
+        }
+      } catch {
+        add("Could not reach the server. Is it running?", "error");
+      } finally {
+        send.disabled = false;
+        input.focus();
+      }
+    });
+
+    document.getElementById("reset").addEventListener("click", async () => {
+      if (conversationId) {
+        await fetch("/api/reset?conversation_id=" + encodeURIComponent(conversationId), { method: "POST" });
+      }
+      localStorage.removeItem(KEY);
+      conversationId = null;
+      log.innerHTML = "";
+      add("New conversation started. I won't remember the previous one.", "bot");
+    });
+  </script>
+</body>
+</html>
